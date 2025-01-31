@@ -25,5 +25,11 @@ logging
 ---
 
 ## **How to Run**  
+
+### **Using Python (Source Code)**  
 1. Ensure that `Foods.xlsx` and `little_recipe.py` are in the **same folder**.  
 2. Run the `little_recipe.py` file.  
+
+### **Using the Executable (No Python Required)**  
+Alternatively, you can run the program using **LittleRecipe.exe** without needing to install Python.  
+Check the **Releases** section for the executable file.  
