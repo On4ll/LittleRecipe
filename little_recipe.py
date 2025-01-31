@@ -67,6 +67,12 @@ def beam_search(recipe, priority_stats, banned_ingredients, must_have_ingredient
         for combo_foods, combo_stats in tqdm(beam, desc=f"Slot {i+1}", leave=False, disable=not SHOW_TQDM_IN_CONSOLE):
             for food in slot:
                 new_stats = combo_stats + food['stats']
+                
+                # Deduct 1 for every pair of the same stat
+                for stat_index in range(len(stat_cols)):
+                    if combo_stats[stat_index] > 0 and food['stats'][stat_index] > 0:
+                        new_stats[stat_index] -= 1
+                
                 new_combo = combo_foods + [food['Foods']]
                 new_beam.append((new_combo, new_stats))
                 total_iterations += 1  # Increment iteration counter
@@ -94,11 +100,6 @@ def beam_search(recipe, priority_stats, banned_ingredients, must_have_ingredient
     results = []
     for combo, stats in beam:
         stat_dict = {stat_cols[i]: int(stats[i]) for i in range(len(stat_cols))}  # Convert stats to integers
-        
-        # Apply the rule for _pot stats
-        for stat in stat_dict:
-            if "_pot" in stat:
-                stat_dict[stat] -= stat_dict[stat] // 15  # Deduct 1 for every 15
 
         # Ensure "per" stat is not lower than -2
         if "per" in stat_dict and stat_dict["per"] < -2:
