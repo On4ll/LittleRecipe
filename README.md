@@ -15,7 +15,7 @@ While it provides the best possible results for most recipes, the calculations a
 
 ### **Using the Executable (No Python Required)**  
 You can run the program using **LittleRecipe.exe** without needing to install Python.  
-Check the **[latest release here]([https://github.com/yourusername/LittleRecipe/releases/latest (https://github.com/On4ll/LittleRecipe/releases/tag/Latest))** for the executable file.  
+Check the **[latest release here](https://github.com/yourusername/LittleRecipe/releases/latest (https://github.com/On4ll/LittleRecipe/releases/tag/Latest))** for the executable file.  
 
 ### **Using Python (Source Code)**  
 1. Ensure that `Foods.xlsx` and `little_recipe.py` are in the **same folder**.  
@@ -25,3 +25,9 @@ Check the **[latest release here]([https://github.com/yourusername/LittleRecipe/
 
 ## **Requirements**  
 The following Python libraries are required to run the program:  
+
+- `pandas`  
+- `numpy`  
+- `tkinter`  
+- `tqdm`  
+- `customtkinter`  
