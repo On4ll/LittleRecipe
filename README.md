@@ -6,8 +6,7 @@ While it provides the best possible results for most recipes, the calculations a
 
 ### Accuracy and Performance  
 - Applying too many filtering conditions may exclude some valid recipe combinations, but this is rare.  
-- If you have a powerful PC, you can **increase the computation depth** in the settings to search for additional recipes that might otherwise be discarded due to providing only **small stat increases**.  
-- When calculating **potential stat gains** (e.g., Strength Potential, Dexterity Potential), the final potential values may have a **minor deviation** of about **1–2 points** for high-stat foods.  
+- If you have a powerful PC, you can **increase the computation depth** in the settings to search for additional recipes that might otherwise be discarded due to providing only **small stat increases**.   
 
 ---
 
