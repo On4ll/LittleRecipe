@@ -3,8 +3,8 @@ Dim objFSO, strSourceFile, strDestFile
 Dim rowCount, colCount, lastRow, i, j, sheetIndex, targetRow
 
 ' Set file paths (Use double backslashes for Windows paths)
-strSourceFile = "C:\Users\Nyo\Desktop\Elin Stuff\TableProcessor\Isolation2_UI\Foods_Separated.xlsx" ' Change to your source file path
-strDestFile = "C:\Users\Nyo\Desktop\Elin Stuff\TableProcessor\Isolation2_UI\Merged.xlsx"       ' Output file path
+strSourceFile = "[Source]\Foods_Separated.xlsx" ' Change to your source file path
+strDestFile = "[Destination]\Merged.xlsx"       ' Output file path
 
 ' Create Excel application object
 Set objExcel = CreateObject("Excel.Application")
