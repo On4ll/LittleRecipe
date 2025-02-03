@@ -16,7 +16,7 @@ input_path = os.path.join(current_dir, "Foods.xlsx")
 output_path = os.path.join(current_dir, "Foods_Calculated.xlsx")
 
 # Set up logging to save console output to a log file
-log_file_path = os.path.join(current_dir, "recipe_optimizer.log")
+log_file_path = os.path.join(current_dir, "little_recipe.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -29,12 +29,20 @@ logging.basicConfig(
 # Load data and preprocess
 data = pd.read_excel(input_path)
 data['IngreType'] = data['IngreType'].str.split(', ')
-stat_cols = [col for col in data.columns if col not in ['Foods', 'IngreType']]
+data['Tag'] = data['Tag'].str.split(', ')  # Split tags into lists
+stat_cols = [col for col in data.columns if col not in ['Foods', 'IngreType', 'Tag']]
 
 # Convert stats to numpy arrays for faster calculations
 foods_list = data.to_dict('records')
 for food in foods_list:
     food['stats'] = np.array([food[col] for col in stat_cols])
+
+# Get unique tags from the "Tag" column
+unique_tags = set()
+for tags in data['Tag']:
+    if isinstance(tags, list):  # Check if tags are not NaN or empty
+        unique_tags.update(tags)
+unique_tags = sorted(unique_tags)  # Sort tags alphabetically
 
 # Variable to control tqdm output visibility in the console
 SHOW_TQDM_IN_CONSOLE = False  # Set to False to disable tqdm output in the console
@@ -44,11 +52,11 @@ def contains_cha(ingredient_name):
     return "cha" in ingredient_name.lower().split()
 
 # Beam Search
-def beam_search(recipe, priority_stats, banned_ingredients, must_have_ingredients, top_x=5, progress_callback=None, depth=1):
+def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, must_have_ingredients, top_x=5, progress_callback=None, depth=1):
     beam_width = (1000 if len(recipe) > 2 else 100000) * depth
     slots = []
     for ingre_type in recipe:
-        valid_foods = [food for food in foods_list if ingre_type in food['IngreType'] and not any(ban.lower() in food['Foods'].lower() for ban in banned_ingredients)]
+        valid_foods = [food for food in tag_allowed_foods if ingre_type in food['IngreType'] and not any(ban.lower() in food['Foods'].lower() for ban in banned_ingredients)]
         valid_foods.sort(
             key=lambda x: sum(x[stat] for stat in priority_stats),
             reverse=True
@@ -131,6 +139,7 @@ def beam_search(recipe, priority_stats, banned_ingredients, must_have_ingredient
         reverse=True
     )
 
+    '''
     # Log the best recipes calculated
     logging.info("Best recipes calculated:")
     for i, result in enumerate(results[:top_x], 1):
@@ -141,6 +150,7 @@ def beam_search(recipe, priority_stats, banned_ingredients, must_have_ingredient
     
     # Add a separator line for clarity
     logging.info("-----------------------------------------------------------------------------------------\n")
+    '''
 
     return results[:top_x]
 
@@ -192,11 +202,11 @@ class RecipeApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Recipe Optimizer")
-        self.resizable(False, True)  # Allow resizing in both directions
+        self.title("Little Recipe")  # Updated window title
+        self.resizable(False, True)
 
         # Center the window on the screen
-        self.update_idletasks()  # Ensures accurate width and height calculations
+        self.update_idletasks()
         mscreen_width = self.winfo_screenwidth()
         mscreen_height = self.winfo_screenheight()
         mwindow_width = 1085
@@ -208,8 +218,8 @@ class RecipeApp(ctk.CTk):
         self.geometry(f"{mwindow_width}x{mwindow_height}+{mx_position}+{my_position}")
 
         # Appearance settings
-        ctk.set_appearance_mode("dark")  # Set dark mode
-        ctk.set_default_color_theme("blue")  # Set color theme
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
 
         # Recipe ingredients list
         self.recipe = []
@@ -225,6 +235,10 @@ class RecipeApp(ctk.CTk):
 
         # Search depth (default is 1)
         self.depth = 1
+
+        # Tags and their checkboxes
+        self.tag_checkboxes = {}  # Store checkboxes for tags
+        self.selected_tags = set(unique_tags)  # All tags are selected by default
 
         # Calculation warnings
         self.calculation_warnings = [
@@ -316,6 +330,27 @@ class RecipeApp(ctk.CTk):
         self.recipe_buttons_frame = ctk.CTkFrame(self.recipe_display_frame, width=800, height=100, fg_color="#3e4e59")
         self.recipe_buttons_frame.pack_propagate(False)
         self.recipe_buttons_frame.pack(fill=tk.X, pady=5)
+
+        # Tag Checkbox Bar
+        self.tag_frame = ctk.CTkFrame(self.recipe_display_frame)
+        self.tag_frame.pack(fill=tk.X, pady=5)
+
+        self.tag_label = ctk.CTkLabel(self.tag_frame, text="Allowed Tags:", font=("Arial", 20))
+        self.tag_label.pack(pady=5)
+
+        # Dynamically add checkboxes for each tag
+        self.tag_checkbox_frame = ctk.CTkFrame(self.tag_frame)
+        self.tag_checkbox_frame.pack(fill=tk.X, pady=5)
+
+        for tag in unique_tags:
+            checkbox = ctk.CTkCheckBox(
+                self.tag_checkbox_frame,
+                text=tag,
+                command=lambda t=tag: self.update_selected_tags(t)
+            )
+            checkbox.pack(side=tk.LEFT, padx=5, pady=5)
+            checkbox.select()  # Select by default
+            self.tag_checkboxes[tag] = checkbox
 
         # Priority Stats
         self.priority_frame = ctk.CTkFrame(self.input_frame)
@@ -414,6 +449,10 @@ class RecipeApp(ctk.CTk):
         self.load_ban_button = ctk.CTkButton(self.ban_buttons_frame, text="Load Banned List", width=150, command=self.load_banned_list)
         self.load_ban_button.pack(side=tk.LEFT, padx=5)
 
+        # Credits Button
+        self.credits_button = ctk.CTkButton(self.ban_buttons_frame, text="Credits", width=150, command=self.show_credits)
+        self.credits_button.pack(side=tk.RIGHT, padx=5)
+
         # Ban Ingredient Section
         self.ban_frame = ctk.CTkFrame(self.input_frame)
         self.ban_frame.pack(fill=tk.X, pady=5)
@@ -452,6 +491,38 @@ class RecipeApp(ctk.CTk):
 
         # Bind mouse wheel to scroll for all widgets in the inner frame
         self._bind_mousewheel_scroll(self.inner_frame)
+
+    def update_selected_tags(self, tag):
+        """Update the selected tags based on checkbox state."""
+        if self.tag_checkboxes[tag].get() == 1:
+            self.selected_tags.add(tag)
+        else:
+            self.selected_tags.discard(tag)
+
+        #print(self.selected_tags)
+
+    def show_credits(self):
+        """Open a new window to display credits."""
+        credits_window = ctk.CTkToplevel(self)
+        credits_window.title("Credits")
+        credits_window.geometry("300x100")
+
+        # Center the window on the screen
+        credits_window.update_idletasks()
+        screen_width = credits_window.winfo_screenwidth()
+        screen_height = credits_window.winfo_screenheight()
+        window_width = 300
+        window_height = 100
+
+        x_position = (screen_width // 2) - (window_width // 2)
+        y_position = (screen_height // 2) - (window_height // 2)
+
+        credits_window.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
+        self.after(100, lambda: credits_window.focus_force()) # Bring the window to the front
+
+        # Add credits text
+        credits_label = ctk.CTkLabel(credits_window, text="@On4ll\n@mRain", font=("Arial", 20))
+        credits_label.pack(pady=20)
 
     def _bind_mousewheel_scroll(self, widget):
         """Recursively bind mouse wheel to all widgets for scrolling."""
@@ -582,12 +653,23 @@ class RecipeApp(ctk.CTk):
 
         # Get banned ingredients
         banned_ingredients = [ingredient.strip().lower() for ingredient in self.ban_entry.get().split(",") if ingredient.strip()]
-        banned_ingredients = list(set(banned_ingredients))  # Remove duplicates
+        banned_ingredients = list(set(banned_ingredients))
         self.banned_ingredients = banned_ingredients
 
         # Get must-have ingredients
         must_have_ingredients = [ingredient.strip().lower() for ingredient in self.must_have_entry.get().split(",") if ingredient.strip()]
         self.must_have_ingredients = must_have_ingredients
+
+        # Filter ingredients based on selected tags
+        tag_allowed_foods = []
+        for food in foods_list:
+            if not isinstance(food['Tag'], list):  # Add if tags are missing because it's a normal ingredient
+                tag_allowed_foods.append(food)
+                continue
+            # Check if the food has any of the deselected tags
+            if any(tag not in self.selected_tags for tag in food['Tag']):
+                continue  # Skip this food if it has any deselected tag
+            tag_allowed_foods.append(food)
 
         # Reset progress bar and label
         self.progress_bar.set(0)
@@ -597,8 +679,8 @@ class RecipeApp(ctk.CTk):
         # Calculate the total number of combinations to check
         total_combinations = 1
         for ingre_type in self.recipe:
-            valid_foods = [food for food in foods_list if ingre_type in food['IngreType'] and not any(ban.lower() in food['Foods'].lower() for ban in banned_ingredients)]
-            total_combinations *= len(valid_foods)
+            valid_foods_for_type = [food for food in tag_allowed_foods if ingre_type in food['IngreType'] and not any(ban.lower() in food['Foods'].lower() for ban in banned_ingredients)]
+            total_combinations *= len(valid_foods_for_type)
 
         # Adjust total combinations based on depth
         total_combinations *= (10 ** (self.depth - 1)) ** len(self.recipe)
@@ -612,6 +694,7 @@ class RecipeApp(ctk.CTk):
         best_combinations = beam_search(
             self.recipe,
             self.priority_stats,
+            tag_allowed_foods, 
             banned_ingredients,
             must_have_ingredients,
             top_x=top_x,
@@ -630,7 +713,7 @@ class RecipeApp(ctk.CTk):
         result_window.geometry("800x600")
 
         # Center the window on the screen
-        result_window.update_idletasks()  # Ensure the window dimensions are updated
+        result_window.update_idletasks()
         screen_width = result_window.winfo_screenwidth()
         screen_height = result_window.winfo_screenheight()
         window_width = 950
@@ -639,8 +722,8 @@ class RecipeApp(ctk.CTk):
         x_position = (screen_width // 2) - (window_width // 2)
         y_position = (screen_height // 2) - (window_height // 2)
 
-        result_window.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}") 
-        self.after(100, lambda: result_window.focus_force()) # Bring the window to the front
+        result_window.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
+        self.after(100, lambda: result_window.focus_force())
 
         # Create a scrollable frame for results
         result_scroll_frame = ctk.CTkScrollableFrame(result_window)
@@ -702,7 +785,7 @@ class RecipeApp(ctk.CTk):
                 stats_text = ""
                 for stat in sorted(combo.keys(), key=lambda x: combo[x] if x != "Combination" else 0, reverse=True):
                     if stat != "Combination" and combo[stat] != 0:  # Only show non-zero stats
-                        stats_text += f"{stat}: {combo[stat]}\n"
+                        stats_text += f"{stat}: {int(combo[stat])}\n"
 
                 stats_label = ctk.CTkLabel(
                     combo_frame, 
