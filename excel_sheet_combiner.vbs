@@ -2,7 +2,7 @@ Dim objExcel, objWorkbook, objNewWorkbook, objNewSheet
 Dim objFSO, strSourceFile, strDestFile
 Dim rowCount, colCount, lastRow, i, j, sheetIndex, targetRow
 
-' Set file paths (Use double backslashes for Windows paths)
+' Set file paths
 strSourceFile = "[Source]\Foods_Separated.xlsx" ' Change to your source file path
 strDestFile = "[Destination]\Merged.xlsx"       ' Output file path
 
