@@ -1,6 +1,6 @@
 # LittleRecipe  
 
-LittleRecipe calculates food recipe combinations based on given conditions for the game **Eternal League of Nefia (Elin)**.  
+LittleRecipe calculates food recipe combinations based on given conditions for the game **Elin**.  
 
 While it provides the best possible results for most recipes, the calculations are **approximate** due to the many **variants** of the same food items in the game. Additionally, for recipes with more than 2–3 ingredients, the number of possible combinations becomes too large for normal computers to check exhaustively.  
 
