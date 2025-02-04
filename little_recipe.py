@@ -53,7 +53,10 @@ def contains_cha(ingredient_name):
     return "cha" in ingredient_name.lower().split()
 
 # Beam Search
-def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, must_have_ingredients, top_x=5, progress_callback=None, depth=1, calculation_mode=0):
+def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, must_have_ingredients, top_x=5, progress_callback=None, depth=1, calculation_mode=0, stat_multipliers=None):
+    if stat_multipliers is None:
+        stat_multipliers = {stat: 1.0 for stat in stat_cols}
+        
     beam_width = (1000 if len(recipe) > 2 else 100000) * depth
     slots = []
     for ingre_type in recipe:
@@ -77,11 +80,13 @@ def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, m
 
         for combo_foods, combo_stats in tqdm(beam, desc=f"Slot {i+1}", leave=False, disable=not SHOW_TQDM_IN_CONSOLE):
             for food in slot:
-                new_stats = combo_stats + food['stats']
+                # Apply the stat multipliers to the food stats
+                multiplied_stats = food['stats'] * np.array([stat_multipliers[stat] for stat in stat_cols])
+                new_stats = combo_stats + multiplied_stats
                 
                 # Deduct 1 for every pair of the same stat
                 for stat_index in range(len(stat_cols)):
-                    if combo_stats[stat_index] > 0 and food['stats'][stat_index] > 0:
+                    if combo_stats[stat_index] > 0 and multiplied_stats[stat_index] > 0:
                         new_stats[stat_index] -= 1
                 
                 new_combo = combo_foods + [food['Foods']]
@@ -133,7 +138,9 @@ def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, m
     unique_final_combinations = set()  # Track unique combinations in the final results
 
     for combo, stats in beam:
-        stat_dict = {stat_cols[i]: int(stats[i]) for i in range(len(stat_cols))}  # Convert stats to integers
+        # Divide the stats by the multipliers to restore the actual stats
+        actual_stats = stats / np.array([stat_multipliers[stat] for stat in stat_cols])
+        stat_dict = {stat_cols[i]: int(actual_stats[i]) for i in range(len(stat_cols))}  # Convert stats to integers
 
         # Ensure "per" stat is not lower than -2
         if "per" in stat_dict and stat_dict["per"] < -2:
@@ -434,6 +441,20 @@ class RecipeApp(ctk.CTk):
         self.priority_display_frame.pack_propagate(False)
         self.priority_display_frame.pack(fill=tk.X, pady=5)
 
+        # Stat Multipliers Button
+        self.stat_multipliers_button = ctk.CTkButton(
+            self.input_frame,
+            text="Edit Stat Weights",
+            font=("Arial", 20),
+            fg_color="#596fde",
+            width=200,
+            command=self.open_stat_multipliers_window
+        )
+        self.stat_multipliers_button.pack(pady=10)
+
+         # Initialize stat multipliers
+        self.stat_multipliers = {stat: 1.0 for stat in stat_cols}
+
         # Number of Top Recipes Input
         self.top_x_frame = ctk.CTkFrame(self.input_frame)
         self.top_x_frame.pack(fill=tk.X, pady=5)
@@ -528,6 +549,12 @@ class RecipeApp(ctk.CTk):
         # Bind mouse wheel to scroll for all widgets in the inner frame
         self._bind_mousewheel_scroll(self.inner_frame)
 
+    # Function to update the stat multiplier
+    def update_stat_multiplier(self, stat, value):
+        """Update the stat multiplier value."""
+        self.stat_multipliers[stat] = value
+        self.value_labels[stat].configure(text=f"{value:.2f}")
+    
     def update_selected_tags(self, tag):
         """Update the selected tags based on checkbox state."""
         if self.tag_checkboxes[tag].get() == 1:
@@ -728,6 +755,9 @@ class RecipeApp(ctk.CTk):
             self.progress_label.configure(text=f"{checked_combinations} / {total_combinations}")
             self.update()
 
+        # Get the stat multipliers from the dictionary
+        stat_multipliers = {stat: self.stat_multipliers[stat] for stat in stat_cols}
+
         best_combinations = beam_search(
             self.recipe,
             self.priority_stats,
@@ -737,7 +767,8 @@ class RecipeApp(ctk.CTk):
             top_x=top_x,
             progress_callback=lambda progress, checked: update_progress(progress, checked),
             depth=self.depth,
-            calculation_mode=self.calculation_mode.get()
+            calculation_mode=self.calculation_mode.get(),
+            stat_multipliers=stat_multipliers
         )
 
         # Update progress bar to 100%
@@ -823,12 +854,13 @@ class RecipeApp(ctk.CTk):
                 if self.calculation_mode.get() < 2:
                     prioritized_xp = 0
                     non_prioritized_xp = 0
-                    #other_stats_xp = 0
+                    total_potency = 0
 
                     for stat in combo:
                         if stat == "Combination":
                             continue
                         elif "_pot" in stat:
+                            total_potency += combo[stat]
                             continue
                         elif stat in self.priority_stats:
                             prioritized_xp += combo[stat] * combo.get(f"{stat}_pot", 1)
@@ -839,7 +871,7 @@ class RecipeApp(ctk.CTk):
                     total_xp = prioritized_xp + non_prioritized_xp
 
                     # Display XP information
-                    xp_text = f"Prioritized XP: {prioritized_xp}\nNon-Prioritized XP: {non_prioritized_xp}\nTotal XP: {total_xp}"
+                    xp_text = f"Prioritized XP: {prioritized_xp}\nNon-Prioritized XP: {non_prioritized_xp}\nTotal XP: {total_xp}\nTotal Potency: {total_potency}"
                     xp_label = ctk.CTkLabel(
                         combo_frame, 
                         text=xp_text, 
@@ -1120,6 +1152,85 @@ class RecipeApp(ctk.CTk):
         """Update the search depth based on the slider value."""
         self.depth = int(float(value))
         self.warning_message.configure(text=self.calculation_warnings[self.depth - 1])
+    
+    def open_stat_multipliers_window(self):
+        """Open a new window to configure stat multipliers."""
+        self.stat_window = ctk.CTkToplevel(self)  # Store the window as an instance variable
+        self.stat_window.title("Stat Multipliers")
+        self.stat_window.geometry("600x300")
+
+        # Center the window on the screen
+        self.stat_window.update_idletasks()
+        screen_width = self.stat_window.winfo_screenwidth()
+        screen_height = self.stat_window.winfo_screenheight()
+        window_width = 900
+        window_height = 400
+
+        x_position = (screen_width // 2) - (window_width // 2)
+        y_position = (screen_height // 2) - (window_height // 2)
+
+        self.stat_window.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
+        self.after(100, lambda: self.stat_window.focus_force())  # Bring the window to the front
+
+        # Stat Multipliers Frame
+        self.stat_multipliers_frame = ctk.CTkFrame(self.stat_window)
+        self.stat_multipliers_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        self.stat_multipliers_label = ctk.CTkLabel(self.stat_multipliers_frame, text="Stat Multipliers:", font=("Arial", 20))
+        self.stat_multipliers_label.pack(pady=5)
+
+        # Create a frame to hold the sliders
+        self.sliders_frame = ctk.CTkFrame(self.stat_multipliers_frame)
+        self.sliders_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Initialize a dictionary to store the slider values
+        self.value_labels = {}  # Store value labels
+        self.sliders = {}  # Store sliders
+
+        # Add sliders for each stat
+        for i, stat in enumerate(stat_cols):
+            slider_frame = ctk.CTkFrame(self.sliders_frame)
+            slider_frame.pack(side=tk.LEFT, padx=10, pady=5)
+
+            slider_label = ctk.CTkLabel(slider_frame, text=stat, font=("Arial", 12))
+            slider_label.pack(pady=5)
+
+            slider = ctk.CTkSlider(
+                slider_frame,
+                from_=0.01,
+                to=5,
+                number_of_steps=200,  # 0.01 increments
+                orientation="vertical",
+                height=200,  # Set uniform height
+                width=20,  # Set uniform width,
+                command=lambda value, s=stat: self.update_stat_multiplier(s, float(value))
+            )
+            slider.set(self.stat_multipliers[stat])  # Set to current value
+            slider.pack(pady=5)
+
+            # Value Label (Shows current slider value)
+            value_label = ctk.CTkLabel(slider_frame, text=f"{self.stat_multipliers[stat]:.2f}", font=("Arial", 12))
+            value_label.pack()
+
+            # Store the slider and label in dictionaries for easy access
+            self.value_labels[stat] = value_label
+            self.sliders[stat] = slider
+
+        # Add a "Reset" button
+        reset_button = ctk.CTkButton(
+            self.stat_multipliers_frame,
+            text="Reset",
+            font=("Arial", 16),
+            command=self.reset_stat_multipliers
+        )
+        reset_button.pack(pady=10)
+
+    def reset_stat_multipliers(self):
+        """Reset all stat multipliers to 1.0 and update slider positions."""
+        for stat in stat_cols:
+            self.stat_multipliers[stat] = 1.0
+            self.value_labels[stat].configure(text="1.00")
+            self.sliders[stat].set(1.0)  # Reset the slider position to 1.0
 
 # Run the application
 if __name__ == "__main__":
