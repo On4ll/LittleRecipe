@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 from tqdm import tqdm
 import customtkinter as ctk  # Modern UI library
+from tkinter import IntVar
 import json
 import sys
 import logging
@@ -52,7 +53,7 @@ def contains_cha(ingredient_name):
     return "cha" in ingredient_name.lower().split()
 
 # Beam Search
-def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, must_have_ingredients, top_x=5, progress_callback=None, depth=1):
+def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, must_have_ingredients, top_x=5, progress_callback=None, depth=1, calculation_mode=0):
     beam_width = (1000 if len(recipe) > 2 else 100000) * depth
     slots = []
     for ingre_type in recipe:
@@ -85,10 +86,22 @@ def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, m
                 new_beam.append((new_combo, new_stats))
                 total_iterations += 1  # Increment iteration counter
         
-        new_beam.sort(
-            key=lambda x: (sum(x[1][stat_cols.index(stat)] for stat in priority_stats), sum(x[1])),
-            reverse=True
-        )
+        # Sort the new_beam based on the calculation_mode
+        if calculation_mode == 0:
+            new_beam.sort(
+                key=lambda x: (sum(x[1][stat_cols.index(stat)] for stat in priority_stats), sum(x[1])),
+                reverse=True
+            )
+        elif calculation_mode == 1:
+            new_beam.sort(
+                key=lambda x: (sum(x[1][stat_cols.index(stat)] * x[1][stat_cols.index(f"{stat}_pot")] if f"{stat}_pot" in priority_stats else x[1][stat_cols.index(stat)] for stat in priority_stats), sum(x[1])),
+                reverse=True
+            )
+        else:
+            new_beam.sort(
+                key=lambda x: (sum(x[1][stat_cols.index(stat)] for stat in priority_stats), sum(x[1])),
+                reverse=True
+            )
         beam = new_beam[:beam_width]
 
         # Update progress bar
@@ -134,10 +147,22 @@ def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, m
                 **stat_dict
             })
     
-    results.sort(
-        key=lambda x: (sum(x[stat] for stat in priority_stats), sum(x[stat] for stat in stat_cols if stat not in priority_stats)),
-        reverse=True
-    )
+    # Final sorting based on calculation_mode
+    if calculation_mode == 0:
+        results.sort(
+            key=lambda x: (sum(x[stat] for stat in priority_stats), sum(x[stat] for stat in stat_cols if stat not in priority_stats)),
+            reverse=True
+        )
+    elif calculation_mode == 1:
+        results.sort(
+            key=lambda x: (sum(x[stat] * x[f"{stat}_pot"] if f"{stat}_pot" in priority_stats else x[stat] for stat in priority_stats), sum(x[stat] for stat in stat_cols if stat not in priority_stats)),
+            reverse=True
+        )
+    else:
+        results.sort(
+            key=lambda x: (sum(x[stat] for stat in priority_stats), sum(x[stat] for stat in stat_cols if stat not in priority_stats)),
+            reverse=True
+        )
 
     '''
     # Log the best recipes calculated
@@ -235,6 +260,8 @@ class RecipeApp(ctk.CTk):
 
         # Search depth (default is 1)
         self.depth = 1
+
+        self.calculation_mode = IntVar(value=1)  # 0: Maximize Food Stat Level, 1: Maximize XP Gain, 2: Coming Soon!
 
         # Tags and their checkboxes
         self.tag_checkboxes = {}  # Store checkboxes for tags
@@ -636,6 +663,7 @@ class RecipeApp(ctk.CTk):
             self.priority_stats.remove(stat)
             self.update_priority_display()
 
+    # Modify the calculate_recipes method to pass the calculation mode to beam_search
     def calculate_recipes(self):
         if not self.recipe:
             messagebox.showwarning("Warning", "Please add at least one ingredient to the recipe.")
@@ -699,7 +727,8 @@ class RecipeApp(ctk.CTk):
             must_have_ingredients,
             top_x=top_x,
             progress_callback=lambda progress, checked: update_progress(progress, checked),
-            depth=self.depth
+            depth=self.depth,
+            calculation_mode=self.calculation_mode.get()
         )
 
         # Update progress bar to 100%
@@ -781,11 +810,53 @@ class RecipeApp(ctk.CTk):
 
                     count += 1  # Track number of items in row
 
+                # Calculate total prioritized stat XP, non-prioritized stat XP, and total XP
+                if self.calculation_mode.get() < 2:
+                    prioritized_xp = 0
+                    non_prioritized_xp = 0
+                    #other_stats_xp = 0
+
+                    for stat in combo:
+                        if stat == "Combination":
+                            continue
+                        elif "_pot" in stat:
+                            continue
+                        elif stat in self.priority_stats:
+                            #print("stat: ", stat)
+                            #print("f[stat_pot]:", f"{stat}_pot")
+                            #print("prioritized stats: ", self.priority_stats)
+                            #print("combo = ", combo)
+                            #print("combo[stat] = ", combo[stat])
+                            #print("combo.get(stat_pot)", combo.get(f"{stat}_pot", 1))
+                            prioritized_xp += combo[stat] * combo.get(f"{stat}_pot", 1)
+                        else:
+                            #print("__before__non_prioritized_xp: ", non_prioritized_xp)
+                            temp_pot = combo.get(f"{stat}_pot", 1)
+                            non_prioritized_xp += combo[stat] * (1 if temp_pot == 0 else temp_pot)
+                            #print("__after__non_prioritized_xp: ", non_prioritized_xp)
+
+                    total_xp = prioritized_xp + non_prioritized_xp
+
+                    # Display XP information
+                    xp_text = f"Prioritized XP: {prioritized_xp}\nNon-Prioritized XP: {non_prioritized_xp}\ntotal_xp XP: {total_xp}"
+                    xp_label = ctk.CTkLabel(
+                        combo_frame, 
+                        text=xp_text, 
+                        font=("Arial", 12), 
+                        anchor="w", 
+                        justify="left"
+                    )
+                    xp_label.pack(fill=tk.X, padx=10, pady=5, anchor="w")
+
                 # Display non-zero stats in text format (left-aligned)
                 stats_text = ""
                 for stat in sorted(combo.keys(), key=lambda x: combo[x] if x != "Combination" else 0, reverse=True):
                     if stat != "Combination" and combo[stat] != 0:  # Only show non-zero stats
-                        stats_text += f"{stat}: {int(combo[stat])}\n"
+                        stats_text += f"{stat}: {int(combo[stat])}"
+                        # If the stat has a corresponding "_pot" stat, calculate and display the product
+                        if f"{stat}_pot" in combo and combo[f"{stat}_pot"] != 0:
+                            stats_text += f" ({stat} * {stat}_pot = {int(combo[stat] * combo[f'{stat}_pot'])})"
+                        stats_text += "\n"
 
                 stats_label = ctk.CTkLabel(
                     combo_frame, 
@@ -988,14 +1059,14 @@ class RecipeApp(ctk.CTk):
         """Open the settings window."""
         settings_window = ctk.CTkToplevel(self)
         settings_window.title("Settings")
-        settings_window.geometry("400x300")
+        settings_window.geometry("400x400")
 
         # Center the window on the screen
         settings_window.update_idletasks()  # Ensure the window dimensions are updated
         screen_width = settings_window.winfo_screenwidth()
         screen_height = settings_window.winfo_screenheight()
         window_width = 400
-        window_height = 300
+        window_height = 400
 
         x_position = (screen_width // 2) - (window_width // 2)
         y_position = (screen_height // 2) - (window_height // 2)
@@ -1015,6 +1086,34 @@ class RecipeApp(ctk.CTk):
         # Warning message box
         self.warning_message = ctk.CTkLabel(settings_window, text=self.calculation_warnings[int(self.depth) - 1], font=("Arial", 12), wraplength=350)
         self.warning_message.pack(pady=10)
+
+        # Calculation Mode Label
+        mode_label = ctk.CTkLabel(settings_window, text="Calculation Mode:", font=("Arial", 16))
+        mode_label.pack(pady=10)
+
+        # Slider for calculation mode
+        self.mode_slider = ctk.CTkSlider(settings_window, from_=0, to=2, number_of_steps=2, command=self.update_mode)
+        self.mode_slider.set(self.calculation_mode.get())
+        self.mode_slider.pack(pady=10)
+
+        # Mode description label
+        self.mode_description = ctk.CTkLabel(settings_window, text=self.get_mode_description(self.calculation_mode.get()), font=("Arial", 12), wraplength=350)
+        self.mode_description.pack(pady=10)
+
+    def update_mode(self, value):
+        """Update the calculation mode based on the slider value."""
+        self.calculation_mode.set(int(float(value)))
+        self.mode_description.configure(text=self.get_mode_description(self.calculation_mode.get()))
+
+    def get_mode_description(self, mode):
+        """Get the description for the selected calculation mode."""
+        if mode == 0:
+            return "Maximize Food Stat Level: The program will work as it is."
+        elif mode == 1:
+            return "Maximize XP Gain: The program will try to find the highest value with the condition (stat * stat_pot) for priority stats."
+        elif mode == 2:
+            return "Coming Soon!"
+        return ""
 
     def update_depth(self, value):
         """Update the search depth based on the slider value."""
