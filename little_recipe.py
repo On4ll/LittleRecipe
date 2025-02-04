@@ -73,6 +73,8 @@ def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, m
 
     for i, slot in enumerate(tqdm(slots, desc="Processing recipe slots", disable=not SHOW_TQDM_IN_CONSOLE)):
         new_beam = []
+        unique_combinations = set()  # Track unique combinations
+
         for combo_foods, combo_stats in tqdm(beam, desc=f"Slot {i+1}", leave=False, disable=not SHOW_TQDM_IN_CONSOLE):
             for food in slot:
                 new_stats = combo_stats + food['stats']
@@ -83,6 +85,15 @@ def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, m
                         new_stats[stat_index] -= 1
                 
                 new_combo = combo_foods + [food['Foods']]
+                
+                # Create a sorted tuple of the combo to check for uniqueness
+                sorted_combo = tuple(sorted(new_combo))
+                
+                # Skip if this combination has already been processed
+                if sorted_combo in unique_combinations:
+                    continue
+                
+                unique_combinations.add(sorted_combo)  # Mark this combination as processed
                 new_beam.append((new_combo, new_stats))
                 total_iterations += 1  # Increment iteration counter
         
@@ -119,6 +130,8 @@ def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, m
     logging.info(f"Iterations per second: {iterations_per_second:.2f}")
 
     results = []
+    unique_final_combinations = set()  # Track unique combinations in the final results
+
     for combo, stats in beam:
         stat_dict = {stat_cols[i]: int(stats[i]) for i in range(len(stat_cols))}  # Convert stats to integers
 
@@ -142,6 +155,15 @@ def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, m
             if cha_count > 1:
                 continue  # Skip this combination if it contains more than one "cha" ingredient
 
+            # Create a sorted tuple of the combo to check for uniqueness
+            sorted_combo = tuple(sorted(combo))
+            
+            # Skip if this combination has already been processed
+            if sorted_combo in unique_final_combinations:
+                continue
+            
+            unique_final_combinations.add(sorted_combo)  # Mark this combination as processed
+
             results.append({
                 'Combination': ', '.join(combo),
                 **stat_dict
@@ -163,19 +185,6 @@ def beam_search(recipe, priority_stats, tag_allowed_foods, banned_ingredients, m
             key=lambda x: (sum(x[stat] for stat in priority_stats), sum(x[stat] for stat in stat_cols if stat not in priority_stats)),
             reverse=True
         )
-
-    '''
-    # Log the best recipes calculated
-    logging.info("Best recipes calculated:")
-    for i, result in enumerate(results[:top_x], 1):
-        logging.info(f"Recipe {i}: {result['Combination']}")
-        for stat, value in result.items():
-            if stat != "Combination":
-                logging.info(f"  {stat}: {value}")
-    
-    # Add a separator line for clarity
-    logging.info("-----------------------------------------------------------------------------------------\n")
-    '''
 
     return results[:top_x]
 
@@ -822,23 +831,15 @@ class RecipeApp(ctk.CTk):
                         elif "_pot" in stat:
                             continue
                         elif stat in self.priority_stats:
-                            #print("stat: ", stat)
-                            #print("f[stat_pot]:", f"{stat}_pot")
-                            #print("prioritized stats: ", self.priority_stats)
-                            #print("combo = ", combo)
-                            #print("combo[stat] = ", combo[stat])
-                            #print("combo.get(stat_pot)", combo.get(f"{stat}_pot", 1))
                             prioritized_xp += combo[stat] * combo.get(f"{stat}_pot", 1)
                         else:
-                            #print("__before__non_prioritized_xp: ", non_prioritized_xp)
                             temp_pot = combo.get(f"{stat}_pot", 1)
                             non_prioritized_xp += combo[stat] * (1 if temp_pot == 0 else temp_pot)
-                            #print("__after__non_prioritized_xp: ", non_prioritized_xp)
 
                     total_xp = prioritized_xp + non_prioritized_xp
 
                     # Display XP information
-                    xp_text = f"Prioritized XP: {prioritized_xp}\nNon-Prioritized XP: {non_prioritized_xp}\ntotal_xp XP: {total_xp}"
+                    xp_text = f"Prioritized XP: {prioritized_xp}\nNon-Prioritized XP: {non_prioritized_xp}\nTotal XP: {total_xp}"
                     xp_label = ctk.CTkLabel(
                         combo_frame, 
                         text=xp_text, 
