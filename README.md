@@ -10,7 +10,7 @@ While it provides the best possible results for most recipes, the calculations a
 
 ---
 
-![5](https://github.com/user-attachments/assets/a143e766-f69d-4fa9-849c-54f0fee006a1)
+![1](https://github.com/user-attachments/assets/fe324511-e439-4a38-b468-8590eb8eb34b)
 
 ## **How to Run**  
 
@@ -33,6 +33,6 @@ The following Python libraries are required to run the program:
 - `tqdm`  
 - `customtkinter`
 
-![1](https://github.com/user-attachments/assets/fe324511-e439-4a38-b468-8590eb8eb34b)
 ![2](https://github.com/user-attachments/assets/e5a53fa3-30f8-478b-b4d4-73f3cb88935c)
 ![4](https://github.com/user-attachments/assets/52fb5ca4-6783-4d06-89d8-6e000135fda8)
+![5](https://github.com/user-attachments/assets/a143e766-f69d-4fa9-849c-54f0fee006a1)
